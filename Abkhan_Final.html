@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>داشبورد محاسبات بازی</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- SheetJS (XLSX) for Excel Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Vazirmatn Font -->
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" type="text/css" />
+    <style>
+        body { font-family: 'Vazirmatn', sans-serif; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Custom Range Slider Style - Base (Green/Market) */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px; width: 20px;
+            border-radius: 50%;
+            background: #10b981; /* emerald-500 */
+            cursor: pointer;
+            margin-top: -8px; 
+            border: 2px solid #064e3b; /* darker border */
+            box-shadow: 0 0 5px rgba(16, 185, 129, 0.5);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 4px;
+            cursor: pointer; background: #334155; border-radius: 2px;
+        }
+
+        /* Custom Range Slider Style - Yellow (Products) */
+        input[type=range].slider-yellow::-webkit-slider-thumb {
+            background: #facc15; /* yellow-400 */
+            border: 2px solid #713f12; /* yellow-900 like */
+            box-shadow: 0 0 5px rgba(250, 204, 21, 0.5);
+        }
+        input[type=range].slider-yellow::-webkit-slider-runnable-track {
+            background: #422006; /* Very dark brown/orange background for track */
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen pb-20 select-none">
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed top-4 left-1/2 -translate-x-1/2 z-[110] transition-all duration-300 -translate-y-20 opacity-0 pointer-events-none">
+        <div class="px-6 py-3 rounded-xl shadow-xl flex items-center gap-2 border backdrop-blur-md" id="toast-content">
+            <!-- Icon injected via JS -->
+            <span id="toast-message"></span>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="modal-backdrop" class="fixed inset-0 bg-black/80 z-[120] hidden items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden transform transition-all scale-100">
+            <div class="p-6 text-center">
+                <div id="modal-icon-container" class="w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4 bg-red-900/30 text-red-500">
+                    <i data-lucide="alert-circle" class="w-8 h-8"></i>
+                </div>
+                <h3 id="modal-title" class="text-xl font-bold text-white mb-2">عنوان</h3>
+                <p id="modal-message" class="text-slate-400 text-sm">پیام</p>
+            </div>
+            <div class="flex border-t border-slate-700">
+                <button onclick="closeModal()" class="flex-1 py-4 text-slate-400 hover:bg-slate-800 transition-colors">انصراف</button>
+                <button id="modal-confirm-btn" class="flex-1 py-4 font-bold transition-colors bg-red-600/10 text-red-400 hover:bg-red-600 hover:text-white">تایید نهایی</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Invoice/Details Modal -->
+    <div id="invoice-modal" class="fixed inset-0 bg-black/80 z-[100] hidden items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-slate-900 border border-slate-700 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden relative">
+            <button onclick="closeInvoiceModal()" class="absolute top-4 left-4 p-1 bg-slate-800 rounded-full text-slate-400 hover:text-white z-10">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+            <div class="bg-gradient-to-r from-emerald-900 to-slate-800 p-6 pb-8">
+                <h3 class="text-xl font-bold text-white flex items-center gap-2">
+                    <i data-lucide="file-text" class="w-6 h-6"></i>
+                    جزئیات فاکتور
+                </h3>
+                <div id="invoice-timestamp" class="text-xs text-emerald-300 mt-1 font-mono"></div>
+            </div>
+            <div class="p-6 -mt-4 bg-slate-900 rounded-t-3xl text-sm space-y-4" id="invoice-content">
+                <!-- Dynamic Content -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Bar: Players -->
+    <div class="bg-slate-800 border-b border-slate-700 sticky top-0 z-40 shadow-md">
+        <div class="max-w-6xl mx-auto p-4 flex gap-4 overflow-x-auto items-center no-scrollbar" id="players-list">
+            <!-- Players injected here -->
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="max-w-6xl mx-auto p-4 space-y-6 mt-4">
+        
+        <!-- Header & Tabs -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+                <div class="flex items-center gap-2">
+                    <i data-lucide="calculator" class="w-8 h-8 text-emerald-400"></i>
+                    
+                    <!-- Display Name Mode -->
+                    <div id="name-display-mode" class="flex items-center gap-2 group cursor-pointer" onclick="toggleEditName(true)">
+                        <h1 id="header-player-name" class="text-2xl font-bold text-emerald-400">بازیکن</h1>
+                        
+                        <!-- NEW: Total Water Badge -->
+                        <div class="flex items-center gap-1 bg-blue-900/30 border border-blue-500/30 text-blue-300 text-xs px-2 py-1 rounded-md mr-2" title="مجموع آب مصرفی کل نوبت‌ها">
+                            <span id="header-total-water" class="font-mono font-bold">0</span>
+                            <i data-lucide="droplets" class="w-3 h-3"></i>
+                        </div>
+
+                        <button class="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-white">
+                            <i data-lucide="edit-3" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+
+                    <!-- Edit Name Mode -->
+                    <div id="name-edit-mode" class="hidden items-center gap-2 bg-slate-800 rounded-lg p-1 border border-emerald-500/50">
+                        <input type="text" id="edit-name-input" class="bg-transparent border-none text-white text-lg font-bold focus:outline-none px-2 w-40" placeholder="نام بازیکن">
+                        <button onclick="savePlayerName()" class="p-1 hover:bg-emerald-500/20 rounded-md text-emerald-400"><i data-lucide="check" class="w-5 h-5"></i></button>
+                        <button onclick="toggleEditName(false)" class="p-1 hover:bg-red-500/20 rounded-md text-red-400"><i data-lucide="x" class="w-5 h-5"></i></button>
+                    </div>
+
+                    <button onclick="confirmDeletePlayer()" id="delete-player-btn" class="mr-2 text-slate-600 hover:text-red-400 transition-colors p-1" title="حذف بازیکن">
+                        <i data-lucide="trash-2" class="w-5 h-5"></i>
+                    </button>
+                </div>
+                <p class="text-slate-400 text-xs mt-1 mr-10">داشبورد مدیریتی محاسبات بازی</p>
+            </div>
+            
+            <div class="flex bg-slate-800 rounded-lg p-1 border border-slate-700">
+                <button onclick="switchTab('calculator')" id="tab-calculator" class="px-4 py-2 rounded-md text-sm transition-colors bg-emerald-600 text-white">محاسبه نوبت جدید</button>
+                <button onclick="switchTab('history')" id="tab-history" class="px-4 py-2 rounded-md text-sm transition-colors text-slate-400 hover:text-white flex items-center gap-2">
+                    <i data-lucide="history" class="w-4 h-4"></i>
+                    سوابق (<span id="history-count">0</span>)
+                </button>
+            </div>
+        </div>
+
+        <!-- Calculator Tab -->
+        <div id="content-calculator" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- Left: Inputs -->
+            <div class="lg:col-span-8 space-y-6">
+                
+                <!-- Global Settings -->
+                <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="text-slate-400 text-sm mb-2 block">ضریب بازار (۱ تا ۹)</label>
+                        <div class="flex items-center gap-4">
+                            <input type="range" min="1" max="9" step="1" value="1" id="input-market" class="flex-1" oninput="updateCalculations()">
+                            <span id="display-market" class="bg-slate-900 text-emerald-400 font-mono text-xl w-10 h-10 flex items-center justify-center rounded-lg border border-slate-600">1</span>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-slate-400 text-sm mb-2 block">سطح آبخوان (۱ تا ۶)</label>
+                        <div class="grid grid-cols-6 gap-2" id="aquifer-buttons">
+                            <!-- Buttons generated by JS -->
+                        </div>
+                        <div class="text-xs text-blue-400 mt-2 flex justify-between">
+                            <span id="aquifer-tax-display">مالیات: 0</span>
+                            <span id="aquifer-card-price-display">پایه کارت: 20</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Product Table -->
+                <div class="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+                    <div class="p-4 bg-slate-800 border-b border-slate-700 flex justify-between items-center">
+                        <h3 class="font-bold text-slate-200 flex items-center gap-2">
+                            <i data-lucide="sprout" class="w-5 h-5 text-emerald-500"></i>
+                            محصولات کشت شده
+                        </h3>
+                        <div class="text-xs text-slate-400">
+                            مجموع آب مصرفی: <span id="total-water-used" class="text-blue-400 font-bold text-sm">0</span> واحد
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-right text-sm">
+                            <thead class="bg-slate-900 text-slate-400">
+                                <tr>
+                                    <th class="p-3">محصول</th>
+                                    <th class="p-3">نیاز آبی</th>
+                                    <th class="p-3">قیمت پایه</th>
+                                    <th class="p-3 w-40">تعداد کاشت</th>
+                                    <th class="p-3 text-left">هزینه نهایی</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-700" id="products-table-body">
+                                <!-- Rows generated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Resources & Fines -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Water/Insurance -->
+                    <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 space-y-4">
+                        <h3 class="font-bold text-slate-200 flex items-center gap-2 border-b border-slate-700 pb-2">
+                            <i data-lucide="droplets" class="w-5 h-5 text-blue-500"></i>
+                            منابع و کارت‌ها
+                        </h3>
+                        <div>
+                            <div class="flex justify-between text-sm mb-1">
+                                <label class="text-slate-400">تعداد کارت آب</label>
+                                <span class="text-xs text-blue-400">قیمت واحد: <span id="water-card-unit-price">0</span></span>
+                            </div>
+                            <input type="number" id="input-water-cards" value="0" min="0" oninput="updateCalculations()" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-2 text-white outline-none focus:border-blue-500">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-sm mb-1">
+                                <label class="text-slate-400">تعداد بیمه</label>
+                                <span class="text-xs text-yellow-400">قیمت واحد: <span id="insurance-unit-price">0</span></span>
+                            </div>
+                            <input type="number" id="input-insurance" value="0" min="0" oninput="updateCalculations()" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-2 text-white outline-none focus:border-yellow-500">
+                        </div>
+                    </div>
+
+                    <!-- Fines -->
+                    <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 space-y-4">
+                        <h3 class="font-bold text-slate-200 flex items-center gap-2 border-b border-slate-700 pb-2">
+                            <i data-lucide="alert-triangle" class="w-5 h-5 text-red-500"></i>
+                            جریمه نکاشت
+                        </h3>
+                        <div class="grid grid-cols-3 gap-2">
+                            <div>
+                                <label class="text-xs text-red-400 block mb-1">قرمز (150)</label>
+                                <input type="number" id="fine-red" value="0" min="0" oninput="updateCalculations()" class="w-full bg-slate-900 border border-red-900/50 rounded p-2 text-center text-white">
+                            </div>
+                            <div>
+                                <label class="text-xs text-yellow-400 block mb-1">زرد (250)</label>
+                                <input type="number" id="fine-yellow" value="0" min="0" oninput="updateCalculations()" class="w-full bg-slate-900 border border-yellow-900/50 rounded p-2 text-center text-white">
+                            </div>
+                            <div>
+                                <label class="text-xs text-green-400 block mb-1">سبز (400)</label>
+                                <input type="number" id="fine-green" value="0" min="0" oninput="updateCalculations()" class="w-full bg-slate-900 border border-green-900/50 rounded p-2 text-center text-white">
+                            </div>
+                        </div>
+                        <div class="text-right text-xs text-red-300 pt-2">
+                            مجموع جریمه: <span id="total-fine-cost">0</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Right: Invoice -->
+            <div class="lg:col-span-4 space-y-4">
+                <div class="bg-gradient-to-br from-emerald-900 to-slate-900 p-6 rounded-2xl shadow-xl border border-emerald-500/30 sticky top-24">
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-xl font-bold text-white">فاکتور نهایی</h2>
+                        <i data-lucide="coins" class="w-6 h-6 text-emerald-400"></i>
+                    </div>
+
+                    <div class="space-y-4 text-sm">
+                        <!-- Total Water Used Added Here -->
+                        <div class="flex justify-between text-slate-300 mb-2 border-b border-white/5 pb-2">
+                            <span>مجموع آب مصرفی</span>
+                            <span class="font-mono text-blue-300 flex items-center gap-1" dir="ltr">
+                                <span id="inv-total-water">0</span> <i data-lucide="droplets" class="w-3 h-3"></i>
+                            </span>
+                        </div>
+
+                        <div class="flex justify-between text-slate-300">
+                            <span>هزینه کل کاشت</span>
+                            <span class="font-mono text-white" id="inv-planting">0</span>
+                        </div>
+                        <div class="flex justify-between text-slate-300">
+                            <span>هزینه کارت آب</span>
+                            <span class="font-mono text-blue-300" id="inv-water">0</span>
+                        </div>
+                        <div class="flex justify-between text-slate-300">
+                            <span>هزینه بیمه</span>
+                            <span class="font-mono text-yellow-300" id="inv-insurance">0</span>
+                        </div>
+                        <div class="flex justify-between text-slate-300">
+                            <span>مالیات آبخوان</span>
+                            <span class="font-mono text-orange-300" id="inv-tax">0</span>
+                        </div>
+                        <div class="flex justify-between text-slate-300 border-b border-white/10 pb-4">
+                            <span>جریمه نکاشت</span>
+                            <span class="font-mono text-red-400" id="inv-fine">0</span>
+                        </div>
+
+                        <div class="flex justify-between items-center pt-2">
+                            <span class="text-lg font-bold text-emerald-400">مبلغ قابل پرداخت</span>
+                            <div class="text-right">
+                                <span class="text-3xl font-black text-white" id="inv-total">0</span>
+                                <span class="block text-xs text-emerald-500/70 mt-1">اشرفی</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button onclick="saveRound()" class="w-full mt-8 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-emerald-900/50 transition-all flex items-center justify-center gap-2 group cursor-pointer">
+                        <i data-lucide="save" class="w-5 h-5 group-hover:scale-110 transition-transform"></i>
+                        ثبت نوبت و ذخیره
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- History Tab -->
+        <div id="content-history" class="hidden bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+            <!-- EXPORT HEADER -->
+            <div class="p-4 bg-slate-900 border-b border-slate-700 flex justify-between items-center">
+                <h3 class="text-slate-300 font-bold flex items-center gap-2">
+                    <i data-lucide="list" class="w-5 h-5 text-emerald-400"></i>
+                    لیست نوبت‌های ثبت شده
+                </h3>
+                <button onclick="exportData()" class="bg-blue-600 hover:bg-blue-500 text-white text-xs px-3 py-2 rounded-lg flex items-center gap-2 transition-colors">
+                    <i data-lucide="share-2" class="w-4 h-4"></i>
+                    خروجی اکسل همه بازیکنان
+                </button>
+            </div>
+
+            <div id="history-empty" class="p-12 text-center text-slate-500 hidden">
+                <i data-lucide="history" class="w-12 h-12 mx-auto mb-4 opacity-50"></i>
+                هنوز نوبتی برای این بازیکن ثبت نشده است.
+            </div>
+            <div class="overflow-x-auto" id="history-content">
+                <table class="w-full text-right text-sm">
+                    <thead class="bg-slate-900 text-slate-400">
+                        <tr>
+                            <th class="p-4">زمان</th>
+                            <th class="p-4">ضریب / آبخوان</th>
+                            <th class="p-4">کشت</th>
+                            <th class="p-4">پرداختی نهایی</th>
+                            <th class="p-4 text-center">عملیات</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-700" id="history-table-body">
+                        <!-- History items -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- JavaScript Logic -->
+    <script>
+        // --- Configuration ---
+        const PRODUCTS_CONFIG = {
+            "حبوبات": { max: 7, waterNeed: 3, defaultBasePrice: 50 },
+            "غلات": { max: 7, waterNeed: 4, defaultBasePrice: 50 },
+            "جالیزی": { max: 6, waterNeed: 5, defaultBasePrice: 100 },
+            "سبزیجات": { max: 6, waterNeed: 5, defaultBasePrice: 150 },
+            "علوفه": { max: 7, waterNeed: 8, defaultBasePrice: 100 },
+            "باغی": { max: 6, waterNeed: 6, defaultBasePrice: 150 },
+        };
+
+        const AQUIFER_LEVELS = {
+            1: { cardBasePrice: 20, tax: 0 },
+            2: { cardBasePrice: 30, tax: 1500 },
+            3: { cardBasePrice: 80, tax: 2500 },
+            4: { cardBasePrice: 150, tax: 4000 },
+            5: { cardBasePrice: 300, tax: 6500 },
+            6: { cardBasePrice: 500, tax: 10000 },
+        };
+
+        const NON_PLANTING_PENALTY = { red: 150, yellow: 250, green: 400 };
+
+        // --- State ---
+        let players = JSON.parse(localStorage.getItem('game_players')) || [{ id: '1', name: 'بازیکن اول', history: [] }];
+        let activePlayerId = localStorage.getItem('game_active_player') || '1';
+        let currentInputs = {
+            marketMultiplier: 1,
+            aquiferLevel: 1,
+            products: {},
+            waterCards: 0,
+            insurance: 0,
+            fines: { red: 0, yellow: 0, green: 0 }
+        };
+
+        // Initialize Products Input State
+        Object.keys(PRODUCTS_CONFIG).forEach(key => {
+            currentInputs.products[key] = { qty: 0, basePrice: PRODUCTS_CONFIG[key].defaultBasePrice };
+        });
+
+        // --- Initialization ---
+        function init() {
+            renderPlayers();
+            renderAquiferButtons();
+            renderProductTable();
+            updateCalculations();
+            lucide.createIcons();
+        }
+
+        // --- Logic ---
+        function getActivePlayer() {
+            return players.find(p => p.id === activePlayerId) || players[0];
+        }
+
+        function saveState() {
+            localStorage.setItem('game_players', JSON.stringify(players));
+            localStorage.setItem('game_active_player', activePlayerId);
+            renderPlayers(); // Re-render header to update names/counts if needed
+        }
+
+        function formatNumber(num) {
+            return new Intl.NumberFormat('fa-IR').format(num);
+        }
+
+        // --- Tabs ---
+        function switchTab(tab) {
+            document.getElementById('content-calculator').classList.add('hidden');
+            document.getElementById('content-history').classList.add('hidden');
+            document.getElementById('tab-calculator').className = "px-4 py-2 rounded-md text-sm transition-colors text-slate-400 hover:text-white";
+            document.getElementById('tab-history').className = "px-4 py-2 rounded-md text-sm transition-colors text-slate-400 hover:text-white flex items-center gap-2";
+
+            if (tab === 'calculator') {
+                document.getElementById('content-calculator').classList.remove('hidden');
+                document.getElementById('tab-calculator').className = "px-4 py-2 rounded-md text-sm transition-colors bg-emerald-600 text-white";
+            } else {
+                document.getElementById('content-history').classList.remove('hidden');
+                document.getElementById('tab-history').className = "px-4 py-2 rounded-md text-sm transition-colors bg-emerald-600 text-white flex items-center gap-2";
+                renderHistory();
+            }
+        }
+
+        // --- Player Management ---
+        function renderPlayers() {
+            const container = document.getElementById('players-list');
+            container.innerHTML = '';
+            
+            players.forEach(p => {
+                const isActive = p.id === activePlayerId;
+                const btn = document.createElement('button');
+                btn.className = `flex items-center gap-2 px-4 py-2 rounded-lg transition-all whitespace-nowrap ${isActive ? 'bg-emerald-600 text-white shadow-lg ring-2 ring-emerald-400 ring-offset-2 ring-offset-slate-800' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`;
+                btn.innerHTML = `<i data-lucide="user" class="w-4 h-4"></i> ${p.name}`;
+                btn.onclick = () => { activePlayerId = p.id; saveState(); updateHeader(); switchTab('calculator'); };
+                container.appendChild(btn);
+            });
+
+            const addBtn = document.createElement('button');
+            addBtn.className = "bg-slate-700 hover:bg-slate-600 text-emerald-400 p-2 rounded-lg transition-colors";
+            addBtn.innerHTML = `<i data-lucide="plus" class="w-5 h-5"></i>`;
+            addBtn.onclick = addPlayer;
+            container.appendChild(addBtn);
+
+            lucide.createIcons();
+            updateHeader();
+        }
+
+        function addPlayer() {
+            const newId = Date.now().toString();
+            players.push({ id: newId, name: `بازیکن ${players.length + 1}`, history: [] });
+            activePlayerId = newId;
+            saveState();
+            showToast('بازیکن جدید اضافه شد');
+        }
+
+        function updateHeader() {
+            const player = getActivePlayer();
+            document.getElementById('header-player-name').innerText = player.name;
+            document.getElementById('edit-name-input').value = player.name;
+            document.getElementById('history-count').innerText = player.history.length;
+            
+            // Calculate Total Water Across All History Records
+            const totalWater = player.history.reduce((sum, record) => {
+                return sum + (record.stats ? record.stats.totalWaterUsed : 0);
+            }, 0);
+            document.getElementById('header-total-water').innerText = totalWater;
+
+            // Toggle Delete Button visibility
+            const delBtn = document.getElementById('delete-player-btn');
+            if (players.length > 1) delBtn.style.display = 'block';
+            else delBtn.style.display = 'none';
+        }
+
+        function toggleEditName(show) {
+            if (show) {
+                document.getElementById('name-display-mode').classList.replace('flex', 'hidden');
+                document.getElementById('name-edit-mode').classList.replace('hidden', 'flex');
+                document.getElementById('edit-name-input').focus();
+            } else {
+                document.getElementById('name-display-mode').classList.replace('hidden', 'flex');
+                document.getElementById('name-edit-mode').classList.replace('flex', 'hidden');
+            }
+        }
+
+        function savePlayerName() {
+            const newName = document.getElementById('edit-name-input').value.trim();
+            if (newName) {
+                getActivePlayer().name = newName;
+                saveState();
+                showToast('نام بازیکن تغییر کرد');
+            }
+            toggleEditName(false);
+        }
+
+        function confirmDeletePlayer() {
+            showModal('حذف بازیکن', `آیا از حذف کامل "${getActivePlayer().name}" اطمینان دارید؟`, true, () => {
+                players = players.filter(p => p.id !== activePlayerId);
+                activePlayerId = players[0].id;
+                saveState();
+                closeModal();
+                showToast('بازیکن حذف شد', 'error');
+            });
+        }
+
+        // --- Calculator Rendering ---
+        function renderAquiferButtons() {
+            const container = document.getElementById('aquifer-buttons');
+            container.innerHTML = '';
+            [1, 2, 3, 4, 5, 6].forEach(lvl => {
+                const btn = document.createElement('button');
+                btn.id = `aquifer-btn-${lvl}`;
+                btn.textContent = lvl;
+                btn.onclick = () => { currentInputs.aquiferLevel = lvl; updateCalculations(); };
+                btn.className = "h-10 rounded-lg font-bold transition-all bg-slate-900 text-slate-500 hover:bg-slate-700";
+                container.appendChild(btn);
+            });
+        }
+
+        function renderProductTable() {
+            const tbody = document.getElementById('products-table-body');
+            tbody.innerHTML = '';
+            Object.keys(PRODUCTS_CONFIG).forEach(key => {
+                const config = PRODUCTS_CONFIG[key];
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-700/50 transition-colors";
+                tr.innerHTML = `
+                    <td class="p-3 font-medium text-slate-200">
+                        ${key} <span class="block text-xs text-slate-500">حداکثر: ${config.max}</span>
+                    </td>
+                    <td class="p-3 text-blue-300 flex items-center gap-1 mt-2">
+                        ${config.waterNeed} <i data-lucide="droplets" class="w-3 h-3"></i>
+                    </td>
+                    <td class="p-3">
+                        <input type="number" oninput="updateProduct('${key}', 'basePrice', this.value)" value="${config.defaultBasePrice}" class="w-20 bg-slate-900 border border-slate-600 rounded p-1 text-center text-slate-300 focus:border-emerald-500 outline-none">
+                    </td>
+                    <td class="p-3">
+                        <div class="flex flex-col items-center justify-center gap-1">
+                            <div class="flex items-center gap-2 w-full">
+                                <span id="qty-display-${key}" class="font-bold text-yellow-400 w-4 text-center text-lg">0</span>
+                                <input type="range" min="0" max="${config.max}" step="1" 
+                                       oninput="updateProduct('${key}', 'qty', this.value); document.getElementById('qty-display-${key}').innerText = this.value" 
+                                       value="0" id="qty-${key}" 
+                                       class="flex-1 slider-yellow h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                            </div>
+                            <div class="flex justify-between w-full text-[10px] text-slate-500 px-1">
+                                <span>0</span>
+                                <span>${config.max}</span>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="p-3 text-left font-mono text-emerald-400" id="cost-${key}">-</td>
+                `;
+                tbody.appendChild(tr);
+            });
+            lucide.createIcons();
+        }
+
+        // --- Logic & Calculations ---
+        function updateProduct(prod, field, val) {
+            currentInputs.products[prod][field] = Number(val);
+            updateCalculations();
+        }
+
+        function updateCalculations() {
+            // Read Inputs
+            currentInputs.marketMultiplier = Number(document.getElementById('input-market').value);
+            currentInputs.waterCards = Number(document.getElementById('input-water-cards').value);
+            currentInputs.insurance = Number(document.getElementById('input-insurance').value);
+            currentInputs.fines.red = Number(document.getElementById('fine-red').value);
+            currentInputs.fines.yellow = Number(document.getElementById('fine-yellow').value);
+            currentInputs.fines.green = Number(document.getElementById('fine-green').value);
+
+            // Update UI for Inputs
+            document.getElementById('display-market').innerText = currentInputs.marketMultiplier;
+            [1, 2, 3, 4, 5, 6].forEach(lvl => {
+                const btn = document.getElementById(`aquifer-btn-${lvl}`);
+                if (currentInputs.aquiferLevel === lvl) {
+                    btn.className = "h-10 rounded-lg font-bold transition-all bg-blue-600 text-white ring-2 ring-blue-400";
+                } else {
+                    btn.className = "h-10 rounded-lg font-bold transition-all bg-slate-900 text-slate-500 hover:bg-slate-700";
+                }
+            });
+
+            const aquiferData = AQUIFER_LEVELS[currentInputs.aquiferLevel];
+            document.getElementById('aquifer-tax-display').innerText = `مالیات: ${formatNumber(aquiferData.tax)}`;
+            document.getElementById('aquifer-card-price-display').innerText = `پایه کارت: ${aquiferData.cardBasePrice}`;
+
+            // Calculate
+            let plantingCost = 0;
+            let totalWaterUsed = 0;
+
+            Object.keys(PRODUCTS_CONFIG).forEach(key => {
+                const input = currentInputs.products[key];
+                const config = PRODUCTS_CONFIG[key];
+                
+                const rowCost = input.qty * input.basePrice * currentInputs.marketMultiplier;
+                document.getElementById(`cost-${key}`).innerText = input.qty > 0 ? formatNumber(rowCost) : '-';
+
+                plantingCost += rowCost;
+                totalWaterUsed += (input.qty * config.waterNeed);
+            });
+
+            document.getElementById('total-water-used').innerText = totalWaterUsed;
+            // Update Total Water in Invoice
+            document.getElementById('inv-total-water').innerText = totalWaterUsed;
+
+            const waterCardUnitPrice = aquiferData.cardBasePrice * currentInputs.marketMultiplier;
+            const waterCardTotal = currentInputs.waterCards * waterCardUnitPrice;
+            document.getElementById('water-card-unit-price').innerText = formatNumber(waterCardUnitPrice);
+
+            const insuranceUnitPrice = 20 * currentInputs.marketMultiplier;
+            const insuranceTotal = currentInputs.insurance * insuranceUnitPrice;
+            document.getElementById('insurance-unit-price').innerText = formatNumber(insuranceUnitPrice);
+
+            const finesTotal = (currentInputs.fines.red * NON_PLANTING_PENALTY.red) +
+                               (currentInputs.fines.yellow * NON_PLANTING_PENALTY.yellow) +
+                               (currentInputs.fines.green * NON_PLANTING_PENALTY.green);
+            document.getElementById('total-fine-cost').innerText = formatNumber(finesTotal);
+
+            const finalTotal = plantingCost + waterCardTotal + insuranceTotal + aquiferData.tax + finesTotal;
+
+            // Update Invoice
+            document.getElementById('inv-planting').innerText = formatNumber(plantingCost);
+            document.getElementById('inv-water').innerText = formatNumber(waterCardTotal);
+            document.getElementById('inv-insurance').innerText = formatNumber(insuranceTotal);
+            document.getElementById('inv-tax').innerText = formatNumber(aquiferData.tax);
+            document.getElementById('inv-fine').innerText = formatNumber(finesTotal);
+            document.getElementById('inv-total').innerText = formatNumber(finalTotal);
+        }
+
+        function saveRound() {
+            const aquiferData = AQUIFER_LEVELS[currentInputs.aquiferLevel];
+            
+            // Recalculate pure numbers for storage
+            let plantingCost = 0;
+            let totalWaterUsed = 0;
+            Object.keys(PRODUCTS_CONFIG).forEach(key => {
+                const input = currentInputs.products[key];
+                plantingCost += (input.qty * input.basePrice * currentInputs.marketMultiplier);
+                totalWaterUsed += (input.qty * PRODUCTS_CONFIG[key].waterNeed);
+            });
+            const waterTotal = currentInputs.waterCards * (aquiferData.cardBasePrice * currentInputs.marketMultiplier);
+            const insTotal = currentInputs.insurance * (20 * currentInputs.marketMultiplier);
+            const fines = (currentInputs.fines.red * 150) + (currentInputs.fines.yellow * 250) + (currentInputs.fines.green * 400);
+
+            const record = {
+                roundId: Date.now(),
+                timestamp: new Date().toLocaleTimeString('fa-IR'),
+                marketMultiplier: currentInputs.marketMultiplier,
+                aquiferLevel: currentInputs.aquiferLevel,
+                products: JSON.parse(JSON.stringify(currentInputs.products)),
+                waterCardsBought: currentInputs.waterCards,
+                insuranceCount: currentInputs.insurance,
+                nonPlantingCounts: { ...currentInputs.fines },
+                costs: {
+                    planting: plantingCost,
+                    waterCards: waterTotal,
+                    insurance: insTotal,
+                    aquiferTax: aquiferData.tax,
+                    nonPlanting: fines,
+                    total: plantingCost + waterTotal + insTotal + aquiferData.tax + fines
+                },
+                stats: {
+                    totalWaterUsed: totalWaterUsed
+                }
+            };
+
+            getActivePlayer().history.unshift(record);
+            saveState();
+            resetInputs();
+            showToast('نوبت با موفقیت ثبت شد');
+        }
+
+        function resetInputs() {
+            document.getElementById('input-water-cards').value = 0;
+            document.getElementById('input-insurance').value = 0;
+            document.getElementById('fine-red').value = 0;
+            document.getElementById('fine-yellow').value = 0;
+            document.getElementById('fine-green').value = 0;
+            
+            // Reset Quantities but keep Prices
+            Object.keys(PRODUCTS_CONFIG).forEach(key => {
+                document.getElementById(`qty-${key}`).value = 0;
+                document.getElementById(`qty-display-${key}`).innerText = "0"; // Added reset for display
+                currentInputs.products[key].qty = 0;
+            });
+            
+            updateCalculations();
+        }
+
+        // --- History ---
+        function renderHistory() {
+            const player = getActivePlayer();
+            const tbody = document.getElementById('history-table-body');
+            const emptyState = document.getElementById('history-empty');
+            const content = document.getElementById('history-content');
+
+            tbody.innerHTML = '';
+            
+            if (player.history.length === 0) {
+                emptyState.classList.remove('hidden');
+                content.classList.add('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            content.classList.remove('hidden');
+
+            player.history.forEach(record => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-700/50 border-b border-slate-700 last:border-0";
+                
+                // Products Summary String
+                let prodHtml = '';
+                Object.entries(record.products).forEach(([name, data]) => {
+                    if(data.qty > 0) prodHtml += `<span class="text-xs bg-emerald-900/50 text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-800 ml-1 inline-block mb-1">${name}: ${data.qty}</span>`;
+                });
+
+                tr.innerHTML = `
+                    <td class="p-4 text-slate-400 font-mono text-xs">${record.timestamp}</td>
+                    <td class="p-4">
+                        <div class="flex flex-col gap-1">
+                            <span class="text-xs text-emerald-400">بازار: ${record.marketMultiplier}</span>
+                            <span class="text-xs text-blue-400">آبخوان: ${record.aquiferLevel}</span>
+                        </div>
+                    </td>
+                    <td class="p-4">${prodHtml}</td>
+                    <td class="p-4 font-bold text-emerald-400 text-lg">${formatNumber(record.costs.total)}</td>
+                    <td class="p-4 text-center">
+                        <div class="flex items-center justify-center gap-2">
+                            <button onclick='showInvoice(${JSON.stringify(record)})' class="p-2 text-blue-400 hover:bg-blue-900/30 rounded-lg transition-colors flex items-center gap-1 text-xs">
+                                <i data-lucide="file-text" class="w-4 h-4"></i>
+                            </button>
+                            <button onclick="confirmDeleteHistory(${record.roundId})" class="p-2 text-red-400 hover:bg-red-900/30 rounded-lg transition-colors">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+            lucide.createIcons();
+        }
+
+        function confirmDeleteHistory(roundId) {
+            showModal('حذف سابقه', 'آیا مطمئن هستید؟ این عملیات قابل برگشت نیست.', true, () => {
+                const p = getActivePlayer();
+                p.history = p.history.filter(h => h.roundId !== roundId);
+                saveState();
+                renderHistory();
+                closeModal();
+                showToast('سابقه حذف شد', 'error');
+            });
+        }
+
+        // --- Export Feature (Updated with SheetJS and Error Handling) ---
+        function exportData() {
+            // Check if XLSX is loaded
+            if (typeof XLSX === 'undefined') {
+                showToast('کتابخانه اکسل بارگیری نشده است. لطفا صفحه را رفرش کنید.', 'error');
+                return;
+            }
+
+            const wb = XLSX.utils.book_new();
+            let hasData = false;
+
+            players.forEach(player => {
+                if (player.history.length === 0) return; 
+
+                hasData = true;
+                
+                // Prepare Data for Sheet
+                const ws_data = [
+                    ["زمان", "ضریب بازار", "آبخوان", "محصولات", "هزینه کاشت", "آب مصرفی", "هزینه آب", "بیمه", "جریمه", "هزینه کل"] // Headers
+                ];
+
+                player.history.forEach(row => {
+                    let productsStr = "";
+                    Object.entries(row.products).forEach(([name, d]) => {
+                        if(d.qty > 0) productsStr += `${name}(${d.qty}) | `;
+                    });
+
+                    const waterUsed = row.stats ? row.stats.totalWaterUsed : 0;
+
+                    ws_data.push([
+                        row.timestamp,
+                        row.marketMultiplier,
+                        row.aquiferLevel,
+                        productsStr,
+                        row.costs.planting,
+                        waterUsed,
+                        row.costs.waterCards,
+                        row.costs.insurance,
+                        row.costs.nonPlanting,
+                        row.costs.total
+                    ]);
+                });
+
+                const ws = XLSX.utils.aoa_to_sheet(ws_data);
+                const safeName = player.name.replace(/[\[\]\*\/\\\?:]/g, '').substring(0, 31) || `Player_${player.id}`;
+                XLSX.utils.book_append_sheet(wb, ws, safeName);
+            });
+
+            if (!hasData) {
+                showToast('هیچ داده‌ای برای خروجی وجود ندارد', 'error');
+                return;
+            }
+
+            const filename = `Game_Report_${Date.now()}.xlsx`;
+
+            // Attempt to Share (Mobile)
+            // Wrapped in try-catch to prevent Permission Denied errors from stopping execution
+            if (navigator.share && navigator.canShare) {
+                const wbout = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+                const blob = new Blob([wbout], {type:"application/octet-stream"});
+                const file = new File([blob], filename, { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+
+                try {
+                    if(navigator.canShare({ files: [file] })) {
+                        navigator.share({
+                            title: 'گزارش بازی',
+                            text: 'فایل اکسل گزارش بازی تمام بازیکنان',
+                            files: [file]
+                        })
+                        .then(() => showToast('فایل با موفقیت به اشتراک گذاشته شد'))
+                        .catch((err) => {
+                            // Silently fail share and fallback to download
+                            // console.log("Share API failed, falling back to download.");
+                            XLSX.writeFile(wb, filename);
+                        });
+                        return;
+                    }
+                } catch (e) {
+                    // console.log("Share API check failed, falling back to download.");
+                }
+            }
+
+            // Default Desktop Download (Fixes "Local Output" issue)
+            XLSX.writeFile(wb, filename);
+            showToast('فایل دانلود شد');
+        }
+
+        // --- Modals & Toasts ---
+        function showToast(msg, type = 'success') {
+            const el = document.getElementById('toast');
+            const content = document.getElementById('toast-content');
+            document.getElementById('toast-message').innerText = msg;
+            
+            if (type === 'success') {
+                content.className = "px-6 py-3 rounded-xl shadow-xl flex items-center gap-2 border backdrop-blur-md bg-emerald-900/90 border-emerald-500/50 text-emerald-100";
+                content.innerHTML = `<i data-lucide="check" class="w-5 h-5"></i> <span id="toast-message">${msg}</span>`;
+            } else {
+                content.className = "px-6 py-3 rounded-xl shadow-xl flex items-center gap-2 border backdrop-blur-md bg-red-900/90 border-red-500/50 text-red-100";
+                content.innerHTML = `<i data-lucide="alert-circle" class="w-5 h-5"></i> <span id="toast-message">${msg}</span>`;
+            }
+            
+            lucide.createIcons();
+            el.classList.remove('-translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                el.classList.add('-translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        let onConfirmCallback = null;
+        function showModal(title, msg, isDestructive, onConfirm) {
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-message').innerText = msg;
+            const btn = document.getElementById('modal-confirm-btn');
+            const iconContainer = document.getElementById('modal-icon-container');
+            
+            if (isDestructive) {
+                btn.className = "flex-1 py-4 font-bold transition-colors bg-red-600/10 text-red-400 hover:bg-red-600 hover:text-white";
+                iconContainer.className = "w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4 bg-red-900/30 text-red-500";
+            } else {
+                btn.className = "flex-1 py-4 font-bold transition-colors bg-blue-600/10 text-blue-400 hover:bg-blue-600 hover:text-white";
+                iconContainer.className = "w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4 bg-blue-900/30 text-blue-500";
+            }
+
+            onConfirmCallback = onConfirm;
+            document.getElementById('modal-backdrop').classList.replace('hidden', 'flex');
+        }
+
+        document.getElementById('modal-confirm-btn').onclick = () => {
+            if (onConfirmCallback) onConfirmCallback();
+        };
+
+        function closeModal() {
+            document.getElementById('modal-backdrop').classList.replace('flex', 'hidden');
+            onConfirmCallback = null;
+        }
+
+        function showInvoice(record) {
+            document.getElementById('invoice-timestamp').innerText = record.timestamp;
+            const content = document.getElementById('invoice-content');
+            
+            let prodHtml = '';
+            Object.entries(record.products).forEach(([name, data]) => {
+                if(data.qty > 0) prodHtml += `<span class="text-xs bg-emerald-900/30 text-emerald-200 px-2 py-1 rounded-md border border-emerald-800/50 inline-block m-0.5">${name}: ${data.qty}</span>`;
+            });
+
+            // Handle legacy records that don't have stats yet
+            const waterUsed = record.stats ? record.stats.totalWaterUsed : 0;
+
+            content.innerHTML = `
+                <div class="bg-slate-800 p-3 rounded-xl mb-4">
+                    <h4 class="text-xs text-slate-400 mb-2">محصولات کشت شده:</h4>
+                    <div class="flex flex-wrap gap-1">${prodHtml || 'هیچ'}</div>
+                </div>
+                <div class="flex justify-between text-slate-300 mb-2 border-b border-white/5 pb-2"><span>مجموع آب مصرفی</span><span class="font-mono text-blue-300 flex items-center gap-1" dir="ltr">${waterUsed} <i data-lucide="droplets" class="w-3 h-3"></i></span></div>
+                <div class="flex justify-between text-slate-300"><span>هزینه کاشت</span><span class="font-mono text-white">${formatNumber(record.costs.planting)}</span></div>
+                <div class="flex justify-between text-slate-300"><span>هزینه آب (${record.waterCardsBought})</span><span class="font-mono text-blue-300">${formatNumber(record.costs.waterCards)}</span></div>
+                <div class="flex justify-between text-slate-300"><span>هزینه بیمه (${record.insuranceCount})</span><span class="font-mono text-yellow-300">${formatNumber(record.costs.insurance)}</span></div>
+                <div class="flex justify-between text-slate-300"><span>مالیات آبخوان (${record.aquiferLevel})</span><span class="font-mono text-orange-300">${formatNumber(record.costs.aquiferTax)}</span></div>
+                <div class="flex justify-between text-slate-300 border-b border-slate-700 pb-4"><span>جریمه نکاشت</span><span class="font-mono text-red-400">${formatNumber(record.costs.nonPlanting)}</span></div>
+                <div class="flex justify-between items-center pt-2">
+                    <span class="text-lg font-bold text-emerald-400">مبلغ نهایی</span>
+                    <div class="text-right">
+                        <span class="text-2xl font-black text-white">${formatNumber(record.costs.total)}</span>
+                        <span class="block text-xs text-emerald-500/70">اشرفی</span>
+                    </div>
+                </div>
+            `;
+            document.getElementById('invoice-modal').classList.replace('hidden', 'flex');
+        }
+
+        function closeInvoiceModal() {
+            document.getElementById('invoice-modal').classList.replace('flex', 'hidden');
+        }
+
+        // Start
+        init();
+    </script>
+</body>
+</html>
