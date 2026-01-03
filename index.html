@@ -773,12 +773,20 @@
             const wb = XLSX.utils.book_new();
             let hasData = false;
 
+            // NEW: Summary Data Array
+            const summary_data = [
+                ["نام بازیکن", "زمان", "ضریب بازار", "آبخوان", "محصولات", "هزینه کاشت", "آب مصرفی", "هزینه آب", "بیمه", "جریمه", "هزینه کل"]
+            ];
+
+            // Helper array to store individual sheets before adding to WB (to control order if needed)
+            const sheetsToAdd = [];
+
             players.forEach(player => {
                 if (player.history.length === 0) return; 
 
                 hasData = true;
                 
-                // Prepare Data for Sheet
+                // Prepare Data for Individual Sheet
                 const ws_data = [
                     ["زمان", "ضریب بازار", "آبخوان", "محصولات", "هزینه کاشت", "آب مصرفی", "هزینه آب", "بیمه", "جریمه", "هزینه کل"] // Headers
                 ];
@@ -791,7 +799,8 @@
 
                     const waterUsed = row.stats ? row.stats.totalWaterUsed : 0;
 
-                    ws_data.push([
+                    // Row Data
+                    const rowData = [
                         row.timestamp,
                         row.marketMultiplier,
                         row.aquiferLevel,
@@ -802,18 +811,33 @@
                         row.costs.insurance,
                         row.costs.nonPlanting,
                         row.costs.total
-                    ]);
+                    ];
+
+                    // Add to Individual Sheet Data
+                    ws_data.push(rowData);
+
+                    // Add to Summary Data (prepend Player Name)
+                    summary_data.push([player.name, ...rowData]);
                 });
 
                 const ws = XLSX.utils.aoa_to_sheet(ws_data);
                 const safeName = player.name.replace(/[\[\]\*\/\\\?:]/g, '').substring(0, 31) || `Player_${player.id}`;
-                XLSX.utils.book_append_sheet(wb, ws, safeName);
+                sheetsToAdd.push({ ws, name: safeName });
             });
 
             if (!hasData) {
                 showToast('هیچ داده‌ای برای خروجی وجود ندارد', 'error');
                 return;
             }
+
+            // 1. Add Summary Sheet First
+            const summaryWS = XLSX.utils.aoa_to_sheet(summary_data);
+            XLSX.utils.book_append_sheet(wb, summaryWS, "لیست کلی");
+
+            // 2. Add Individual Sheets
+            sheetsToAdd.forEach(sheet => {
+                XLSX.utils.book_append_sheet(wb, sheet.ws, sheet.name);
+            });
 
             const filename = `Game_Report_${Date.now()}.xlsx`;
 
@@ -940,5 +964,4 @@
         init();
     </script>
 </body>
-
 </html>
